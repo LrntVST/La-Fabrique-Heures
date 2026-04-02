@@ -1,0 +1,835 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>La Fabrique à Heures</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf-autotable/3.5.28/jspdf.plugin.autotable.min.js"></script>
+    <style>
+        /* --- STYLES GÉNÉRAUX --- */
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            margin: 0;
+            background-color: #f0f2f5;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            min-height: 100vh;
+        }
+
+        #main-menu {
+            text-align: center;
+            padding: 40px;
+            background: white;
+            border-radius: 20px;
+            box-shadow: 0 10px 25px rgba(0,0,0,0.1);
+            margin-top: 50px;
+            max-width: 800px;
+            z-index: 100;
+        }
+
+        .menu-buttons {
+            display: grid;
+            grid-template-columns: 1fr 1fr;
+            gap: 15px;
+            margin-top: 25px;
+        }
+
+        .menu-btn {
+            padding: 20px;
+            font-size: 1rem;
+            font-weight: bold;
+            border: none;
+            border-radius: 12px;
+            cursor: pointer;
+            transition: transform 0.2s, background 0.2s;
+            color: white;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            min-height: 80px;
+        }
+
+        .btn-evaluation { background-color: #607d8b; grid-column: span 2; }
+        .btn-classic { background-color: #28a745; }
+        .btn-expert { background-color: #8e44ad; }
+        .btn-chrono { background-color: #e74c3c; }
+        .btn-atelier { background-color: #f39c12; } 
+        .btn-voyageur { background-color: #3498db; }
+        .btn-voyageur-expert { background-color: #2c3e50; }
+        
+        .menu-btn:hover { transform: scale(1.02); filter: brightness(1.1); }
+
+        @media (max-width: 500px) {
+            .menu-buttons { grid-template-columns: 1fr; }
+            .btn-evaluation { grid-column: span 1; }
+        }
+
+        #game-container { display: none; width: 100%; flex-direction: column; align-items: center; padding: 20px; }
+        
+        #game-layout {
+            display: flex;
+            flex-direction: row;
+            align-items: center;
+            gap: 30px;
+            background: white;
+            padding: 30px;
+            border-radius: 30px;
+            box-shadow: 0 15px 35px rgba(0,0,0,0.1);
+            position: relative;
+        }
+
+        #game-layout.voyageur-active { min-width: 350px; }
+
+        .pendule-style {
+            position: relative;
+            width: 300px;
+            height: 300px;
+            border: 10px solid #333;
+            border-radius: 50%;
+            background-color: #fff;
+            z-index: 1;
+            touch-action: none;
+        }
+
+        @keyframes pop {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.15); }
+            100% { transform: scale(1); }
+        }
+        .score-up { animation: pop 0.3s ease-out; }
+
+        .aiguille {
+            position: absolute;
+            bottom: 50%;
+            left: 50%;
+            transform-origin: bottom center;
+            border-radius: 10px;
+            z-index: 9;
+        }
+
+        .anim-aiguille { transition: transform 0.8s cubic-bezier(0.4, 2, 0.5, 1); }
+        #aiguille-heure, .aig-h { width: 8px; height: 80px; background: #333; }
+        #aiguille-minute, .aig-m { width: 5px; height: 120px; background: #e74c3c; } 
+        
+        .fantome { display: none; opacity: 0.6; z-index: 5; }
+        .f-h { width: 8px; height: 80px; background: #3498db; }
+        .f-m { width: 5px; height: 120px; background: #2ecc71; }
+
+        .axe {
+            position: absolute; top: 50%; left: 50%; width: 15px; height: 15px;
+            background: #333; border-radius: 50%; transform: translate(-50%, -50%); z-index: 10;
+        }
+
+        .side-panel { display: flex; flex-direction: column; gap: 10px; min-width: 140px; }
+        .stat-badge {
+            display: flex; flex-direction: column; align-items: center;
+            padding: 10px; border-radius: 12px; border: 2px solid; text-align: center;
+        }
+        .stat-label { font-size: 0.7rem; text-transform: uppercase; font-weight: bold; }
+        .stat-value { font-size: 1.5rem; font-weight: 800; }
+
+        .control-panel { display: flex; flex-direction: column; align-items: center; gap: 15px; min-width: 200px; }
+        
+        #cible-atelier {
+            background: #2c3e50; color: #fff; padding: 10px 20px; border-radius: 10px;
+            font-size: 2rem; font-weight: bold; display: none;
+        }
+
+        input[type="text"] {
+            padding: 10px; font-size: 2rem; width: 130px; text-align: center;
+            border: 3px solid #ddd; border-radius: 12px; outline: none;
+        }
+
+        #timer-container {
+            position: absolute; top: 0; left: 0; width: 100%; height: 8px;
+            background: #eee; border-radius: 30px 30px 0 0; overflow: hidden; display: none;
+        }
+        #timer-bar { width: 100%; height: 100%; background: #e74c3c; transition: width 0.1s linear; }
+
+        .success { color: #2e7d32; }
+        .error { color: #c62828; }
+        
+        #back-to-menu {
+            margin-top: 20px; padding: 10px 20px; background: #333; color: white;
+            border: none; border-radius: 8px; cursor: pointer;
+        }
+
+        #voyageur-panel { display: none; flex-direction: column; gap: 15px; width: 100%; }
+        .voyageur-row { display: flex; flex-direction: column; align-items: center; gap: 5px; }
+        .voyageur-row label { font-size: 0.8rem; font-weight: bold; color: #555; }
+
+        #voyageur-expert-layout { display: none; flex-direction: row; align-items: center; gap: 20px; }
+        .voyageur-block { display: flex; flex-direction: column; align-items: center; gap: 10px; }
+        .voyageur-block label { font-weight: bold; color: #34495e; font-size: 0.9rem; }
+
+        .moment-container { display: flex; gap: 10px; margin-bottom: 8px; width: 100%; position: relative; z-index: 20; }
+        .btn-moment {
+            padding: 8px 4px; font-size: 0.75rem; cursor: pointer; border: 2px solid #ddd;
+            border-radius: 8px; background: white; flex: 1; transition: all 0.2s; outline: none; white-space: nowrap;
+        }
+        .btn-moment.active { background-color: #3498db; color: white; border-color: #2980b9; font-weight: bold; box-shadow: 0 2px 5px rgba(0,0,0,0.1); }
+        .btn-moment:hover:not(:disabled) { border-color: #3498db; background-color: #f7fbff; }
+        .btn-moment:disabled { opacity: 0.6; cursor: default; }
+
+        /* Styles pour la modale personnalisée */
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(-20px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        #custom-modal {
+            display: none; position: fixed; top: 0; left: 0; width: 100%; height: 100%; 
+            background: rgba(0,0,0,0.8); z-index: 9999; justify-content: center; align-items: center; 
+            backdrop-filter: blur(4px);
+        }
+
+        #modal-content {
+            background: white; padding: 30px; border-radius: 20px; text-align: center; 
+            max-width: 450px; width: 90%; box-shadow: 0 20px 50px rgba(0,0,0,0.3); 
+            border: 2px solid #3498db; animation: fadeIn 0.3s ease-out;
+        }
+
+        @media (max-width: 1100px) {
+            #voyageur-expert-layout { flex-direction: column; }
+            #game-layout { flex-direction: column; }
+            .side-panel { flex-direction: row; }
+        }
+
+        .result-table {
+            width: 100%;
+            border-collapse: collapse;
+            margin: 20px 0;
+            font-size: 0.9rem;
+            text-align: left;
+        }
+        .result-table th, .result-table td {
+            padding: 10px;
+            border: 1px solid #eee;
+        }
+        .result-table th {
+            background-color: #f8f9fa;
+            color: #2c3e50;
+        }
+    </style>
+</head>
+<body>
+
+    <div id="main-menu">
+        <h1>La Fabrique à Heures</h1>
+        <p>Choisissez votre mode :</p>
+        <div class="menu-buttons">
+            <button class="menu-btn btn-classic" onclick="launchGame('classic')">🎓 MODE CLASSIQUE</button>
+            <button class="menu-btn btn-expert" onclick="launchGame('expert')">🏆 MODE EXPERT</button>
+            <button class="menu-btn btn-chrono" onclick="launchGame('chrono')">⚡ CONTRE-LA-MONTRE</button>
+            <button class="menu-btn btn-atelier" onclick="launchGame('atelier')">🛠 MODE ATELIER (AIGUILLES)</button>
+            <button class="menu-btn btn-voyageur" onclick="launchGame('voyageur')">⏳ VOYAGEUR DU TEMPS</button>
+            <button class="menu-btn btn-voyageur-expert" onclick="launchGame('voyageurExpert')">🚀 VOYAGEUR EXPERT</button>
+            <button class="menu-btn btn-evaluation" onclick="ouvrirEvaluation()">📊 ÉVALUATION (TEST)</button>
+        </div>
+    </div>
+
+    <div id="game-container">
+        <div id="game-layout">
+            <div id="timer-container"><div id="timer-bar"></div></div>
+
+            <div class="side-panel" id="side-panel">
+                <div style="color: #8e44ad; background: #f4ecf7; border-color: #d7bde2;" class="stat-badge">
+                    <span class="stat-label">🏆 Record</span>
+                    <span id="best-count" class="stat-value">0</span>
+                </div>
+                <div style="color: #2980b9; background: #ebf5fb; border-color: #aed6f1;" class="stat-badge">
+                    <span class="stat-label">⏱️ Dernier</span>
+                    <span id="last-count" class="stat-value">0</span>
+                </div>
+                <div id="streak-badge-container" style="color: #e67e22; background: #fff3e0; border-color: #ffcc80;" class="stat-badge">
+                    <span class="stat-label">🔥 Série</span>
+                    <span id="streak-count" class="stat-value">0</span>
+                </div>
+            </div>
+
+            <div id="voyageur-expert-layout">
+                <div class="voyageur-block">
+                    <label>DÉPART</label>
+                    <div class="moment-container" id="ve-moment-debut">
+                        <button type="button" class="btn-moment" id="btn-debut-am" onclick="setMoment('debut', 'AM')">Matin (AM)</button>
+                        <button type="button" class="btn-moment" id="btn-debut-pm" onclick="setMoment('debut', 'PM')">Après-midi (PM)</button>
+                    </div>
+                    <div id="pendule-debut" class="pendule-style">
+                        <div id="fantome-h-debut" class="aiguille fantome f-h"></div>
+                        <div id="fantome-m-debut" class="aiguille fantome f-m"></div>
+                        <div id="aig-h-debut" class="aiguille aig-h anim-aiguille"></div>
+                        <div id="aig-m-debut" class="aiguille aig-m anim-aiguille"></div>
+                        <div class="axe"></div>
+                    </div>
+                </div>
+                <div class="voyageur-block">
+                    <label>DURÉE DU VOYAGE</label>
+                    <input type="text" id="ve-duree" placeholder="00:00" maxlength="5">
+                </div>
+                <div class="voyageur-block">
+                    <label>ARRIVÉE</label>
+                    <div class="moment-container" id="ve-moment-fin">
+                        <button type="button" class="btn-moment" id="btn-fin-am" onclick="setMoment('fin', 'AM')">Matin (AM)</button>
+                        <button type="button" class="btn-moment" id="btn-fin-pm" onclick="setMoment('fin', 'PM')">Après-midi (PM)</button>
+                    </div>
+                    <div id="pendule-fin" class="pendule-style">
+                        <div id="fantome-h-fin" class="aiguille fantome f-h"></div>
+                        <div id="fantome-m-fin" class="aiguille fantome f-m"></div>
+                        <div id="aig-h-fin" class="aiguille aig-h anim-aiguille"></div>
+                        <div id="aig-m-fin" class="aiguille aig-m anim-aiguille"></div>
+                        <div class="axe"></div>
+                    </div>
+                </div>
+            </div>
+
+            <div id="pendule" class="pendule-style">
+                <div id="fantome-heure" class="aiguille fantome f-h"></div>
+                <div id="fantome-minute" class="aiguille fantome f-m"></div>
+                <div id="aiguille-heure" class="aiguille anim-aiguille"></div>
+                <div id="aiguille-minute" class="aiguille anim-aiguille"></div>
+                <div class="axe"></div>
+            </div>
+
+            <div class="control-panel">
+                <div id="cible-atelier">--:--</div>
+                <div id="moment-journee" style="padding: 5px 15px; border-radius: 20px; font-weight: bold; border: 2px solid #ddd;">-</div>
+                <input type="text" id="saisie-heure" placeholder="00:00" maxlength="5">
+                <div id="voyageur-panel">
+                    <div class="voyageur-row"><label>HEURE DE DÉBUT</label><input type="text" id="v-debut" placeholder="08:00" maxlength="5"></div>
+                    <div class="voyageur-row"><label>DURÉE (HH:MM)</label><input type="text" id="v-duree" placeholder="01:30" maxlength="5"></div>
+                    <div class="voyageur-row"><label>HEURE DE FIN</label><input type="text" id="v-fin" placeholder="09:30" maxlength="5"></div>
+                </div>
+                <div style="display: flex; flex-direction: column; gap: 8px; width: 100%;">
+                    <button id="verifier-btn" style="background: #4caf50; color: white; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">VÉRIFIER</button>
+                    <button id="indice-btn" style="background: #ffc107; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold; display: none;">INDICE (0/2)</button>
+                    <button id="suivant-btn" style="background: #2196f3; color: white; padding: 12px; border: none; border-radius: 8px; cursor: pointer; font-weight: bold;">SUIVANT</button>
+                </div>
+                <div id="commentaire" style="text-align: center; font-weight: bold; min-height: 40px;"></div>
+                <div id="essais-info" style="font-size: 0.8rem; color: #666;"></div>
+            </div>
+        </div>
+        <button id="back-to-menu" onclick="showMenu()">↩ Retour au Menu</button>
+    </div>
+
+    <div id="custom-modal">
+        <div id="modal-content">
+            <h2 id="modal-title" style="color:#2c3e50; margin-top:0;">Évaluation</h2>
+            <p id="modal-text" style="white-space: pre-wrap; font-size: 1.1rem; color:#555;"></p>
+            <input type="text" id="modal-input" placeholder="Saisie ici" style="display:none; margin:20px auto; width:90%; padding:12px; border:2px solid #ddd; border-radius:10px; font-size:1.1rem; text-align:center;">
+            <div style="display:flex; gap:12px; justify-content:center; margin-top:25px;">
+                <button id="modal-ok" style="background:#2ecc71; color:white; border:none; padding:12px 25px; border-radius:10px; cursor:pointer; font-weight:bold; flex:1;">Valider</button>
+                <button id="modal-cancel" style="background:#e74c3c; color:white; border:none; padding:12px 25px; border-radius:10px; cursor:pointer; font-weight:bold; flex:1;">Annuler</button>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        let currentGameMode = '';
+        let heureCible, minuteCible, timerInterval;
+        let essaisRestants = 3;
+        let serieVictoires = 0;
+        let recordVictoires = 0;
+        let tempsRestant = 10;
+        let niveauIndice = 0;
+        let voyageurTargetType = ''; 
+        let voySolution = ''; 
+        let vStartMin = 0, vEndMin = 0, vDurationMin = 0;
+        let userH = 0, userM = 0;
+        let userMomentDebut = '';
+        let userMomentFin = '';
+        let isDragging = false;
+        let activeHand = null; 
+
+        let isEvaluationMode = false;
+        let evalStep = 0;
+        let evalScore = 0;
+        let evalDetails = [];
+        let eleveNom = "";
+        let elevePrenom = "";
+        let eleveGroupe = "";
+        const evalSequence = [
+            ...Array(5).fill(['expert', 1]),
+            ...Array(5).fill(['atelier', 1]),
+            ...Array(5).fill(['voyageurExpert', 2])
+        ];
+
+        const ui = {
+            menu: document.getElementById('main-menu'),
+            container: document.getElementById('game-container'),
+            layout: document.getElementById('game-layout'),
+            input: document.getElementById('saisie-heure'),
+            cible: document.getElementById('cible-atelier'),
+            commentaire: document.getElementById('commentaire'),
+            essais: document.getElementById('essais-info'),
+            btnVerifier: document.getElementById('verifier-btn'),
+            btnIndice: document.getElementById('indice-btn'),
+            btnSuivant: document.getElementById('suivant-btn'),
+            timerCont: document.getElementById('timer-container'),
+            timerBar: document.getElementById('timer-bar'),
+            streakBadge: document.getElementById('streak-badge-container'),
+            moment: document.getElementById('moment-journee'),
+            aigH: document.getElementById('aiguille-heure'),
+            aigM: document.getElementById('aiguille-minute'),
+            fanH: document.getElementById('fantome-heure'),
+            fanM: document.getElementById('fantome-minute'),
+            pendule: document.getElementById('pendule'),
+            sidePanel: document.getElementById('side-panel'),
+            voyPanel: document.getElementById('voyageur-panel'),
+            vDebut: document.getElementById('v-debut'),
+            vDuree: document.getElementById('v-duree'),
+            vFin: document.getElementById('v-fin'),
+            voyExpLayout: document.getElementById('voyageur-expert-layout'),
+            veDuree: document.getElementById('ve-duree'),
+            pDeb: document.getElementById('pendule-debut'),
+            pFin: document.getElementById('pendule-fin')
+        };
+
+        function initPendule(el) {
+            for (let i = 0; i < 60; i++) {
+                const container = document.createElement('div');
+                container.style.position = 'absolute'; container.style.width = '100%'; container.style.height = '100%';
+                container.style.transform = `rotate(${i * 6}deg)`;
+                const marque = document.createElement('div');
+                marque.style.position = 'absolute'; marque.style.left = '50%';
+                marque.style.transform = 'translateX(-50%)'; marque.style.top = '5px';
+                if (i % 5 === 0) { marque.style.width = '5px'; marque.style.height = '15px'; marque.style.background = '#333'; } 
+                else { marque.style.width = '2px'; marque.style.height = '6px'; marque.style.background = '#bbb'; }
+                container.appendChild(marque);
+                el.appendChild(container);
+            }
+            for (let i = 1; i <= 12; i++) {
+                const angle = (i * 30 - 90) * (Math.PI / 180);
+                const x = 150 + 115 * Math.cos(angle);
+                const y = 150 + 115 * Math.sin(angle);
+                const div = document.createElement('div');
+                div.style.position = 'absolute'; div.style.left = `${x - 15}px`; div.style.top = `${y - 15}px`;
+                div.style.width = '30px'; div.style.textAlign = 'center'; div.style.fontWeight = 'bold';
+                div.textContent = i;
+                el.appendChild(div);
+            }
+        }
+
+        function showCustomModal(title, text, showInput, onConfirm, singleButton = false, placeholder = "Saisie ici") {
+            const modal = document.getElementById('custom-modal');
+            const input = document.getElementById('modal-input');
+            const btnOk = document.getElementById('modal-ok');
+            const btnCancel = document.getElementById('modal-cancel');
+
+            document.getElementById('modal-title').textContent = title;
+            document.getElementById('modal-text').textContent = text;
+            input.style.display = showInput ? 'block' : 'none';
+            input.placeholder = placeholder;
+            input.value = "";
+            input.style.borderColor = "#ddd";
+            modal.style.display = 'flex';
+
+            const handleModalKey = (e) => {
+                if (e.key === 'Enter') {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    btnOk.click();
+                }
+            };
+
+            window.addEventListener('keydown', handleModalKey, true);
+
+            if (showInput) {
+                setTimeout(() => input.focus(), 100);
+            }
+
+            btnOk.textContent = singleButton ? "OK" : "Valider";
+            btnCancel.style.display = singleButton ? "none" : "block";
+
+            btnOk.onclick = () => {
+                const val = input.value.trim();
+                if (showInput && val === "") {
+                    input.style.borderColor = "red";
+                    return;
+                }
+                window.removeEventListener('keydown', handleModalKey, true);
+                modal.style.display = 'none';
+                if(onConfirm) onConfirm(val);
+            };
+
+            btnCancel.onclick = () => {
+                window.removeEventListener('keydown', handleModalKey, true);
+                modal.style.display = 'none';
+            };
+        }
+
+        function ouvrirEvaluation() {
+            showCustomModal("📝 Identification", "Veuillez saisir votre NOM :", true, (nom) => {
+                eleveNom = nom;
+                showCustomModal("📝 Identification", "Veuillez saisir votre PRÉNOM :", true, (prenom) => {
+                    elevePrenom = prenom;
+                    showCustomModal("📝 Identification", "Veuillez saisir votre GROUPE :", true, (groupe) => {
+                        eleveGroupe = groupe;
+                        showCustomModal(
+                            "🚀 Prêt ?", 
+                            `Bonjour ${elevePrenom} ${eleveNom} (${eleveGroupe}), prêt ?\n(15 questions - Score sur 20)`, 
+                            false, 
+                            () => {
+                                isEvaluationMode = true; evalStep = 0; evalScore = 0; evalDetails = [];
+                                ui.btnSuivant.onclick = prochainEtapeEval;
+                                lancerEtapeEvaluation();
+                            }
+                        );
+                    }, false, "Groupe (ex: CM1-A)");
+                }, false, "Prénom");
+            }, false, "Nom");
+        }
+
+        function setMoment(type, moment) {
+            if (type === 'debut') {
+                userMomentDebut = moment;
+                document.getElementById('btn-debut-am').classList.toggle('active', moment === 'AM');
+                document.getElementById('btn-debut-pm').classList.toggle('active', moment === 'PM');
+            } else {
+                userMomentFin = moment;
+                document.getElementById('btn-fin-am').classList.toggle('active', moment === 'AM');
+                document.getElementById('btn-fin-pm').classList.toggle('active', moment === 'PM');
+            }
+        }
+
+        function updateAiguilles(h, m, suffix = '', isUser = false) {
+            const h12 = h % 12;
+            const degM = m * 6;
+            const degH = (h12 * 30) + (m * 0.5);
+            const hAig = suffix ? document.getElementById(`aig-h-${suffix}`) : ui.aigH;
+            const mAig = suffix ? document.getElementById(`aig-m-${suffix}`) : ui.aigM;
+            if(isUser) { hAig.classList.remove('anim-aiguille'); mAig.classList.remove('anim-aiguille'); }
+            else { hAig.classList.add('anim-aiguille'); mAig.classList.add('anim-aiguille'); }
+            mAig.style.transform = `rotate(${degM}deg)`;
+            hAig.style.transform = `rotate(${degH}deg)`;
+        }
+
+        function launchGame(mode) {
+            currentGameMode = mode;
+            ui.menu.style.display = 'none';
+            ui.container.style.display = 'flex';
+            recordVictoires = localStorage.getItem('record_' + mode) || 0;
+            document.getElementById('best-count').textContent = recordVictoires;
+            document.getElementById('last-count').textContent = "0";
+            document.getElementById('streak-count').textContent = "0";
+            serieVictoires = 0;
+            ui.timerCont.style.display = (mode === 'chrono') ? 'block' : 'none';
+            ui.btnIndice.style.display = (mode === 'classic' || mode === 'voyageur') ? 'block' : 'none';
+            ui.input.style.display = (mode === 'atelier' || mode === 'voyageur' || mode === 'voyageurExpert') ? 'none' : 'block';
+            ui.moment.style.display = (mode === 'atelier' || mode === 'voyageur' || mode === 'voyageurExpert') ? 'none' : 'block';
+            ui.cible.style.display = (mode === 'atelier') ? 'block' : 'none';
+            ui.voyPanel.style.display = (mode === 'voyageur') ? 'flex' : 'none';
+            ui.voyExpLayout.style.display = (mode === 'voyageurExpert') ? 'flex' : 'none';
+            ui.pendule.style.display = (mode === 'voyageur' || mode === 'voyageurExpert') ? 'none' : 'block';
+            ui.sidePanel.style.visibility = 'visible';
+            if (mode === 'voyageur' || mode === 'voyageurExpert') ui.layout.classList.add('voyageur-active');
+            else ui.layout.classList.remove('voyageur-active');
+            genererNouvelleHeure();
+        }
+
+        function lancerEtapeEvaluation() {
+            const [mode, points] = evalSequence[evalStep];
+            launchGame(mode);
+            ui.btnIndice.style.display = 'none';
+            ui.btnSuivant.textContent = "CONTINUER L'EXAMEN";
+            ui.btnSuivant.style.display = "none"; 
+            ui.essais.textContent = `QUESTION ${evalStep + 1} / 15 (Valeur : ${points} pt${points > 1 ? 's' : ''})`;
+        }
+
+        function prochainEtapeEval() {
+            evalStep++;
+            if (evalStep < evalSequence.length) lancerEtapeEvaluation();
+            else afficherResultatFinal();
+        }
+
+        function genererPDF(score, mention) {
+            const { jsPDF } = window.jspdf;
+            const doc = new jsPDF();
+            const date = new Date().toLocaleString('fr-FR');
+
+            // Suppression des émojis pour le PDF (jsPDF ne supporte pas les émojis natifs sans configuration complexe)
+            const mentionSansEmoji = mention.replace(/([\u2700-\u27BF]|[\uE000-\uF8FF]|\uD83C[\uDC00-\uDFFF]|\uD83D[\uDC00-\uDFFF]|[\u2011-\u26FF]|\uD83E[\uDD10-\uDDFF])/g, '').trim();
+
+            doc.setFontSize(18);
+            doc.setTextColor(44, 62, 80);
+            doc.text("Rapport d'Évaluation : La Fabrique à Heures", 20, 20);
+            doc.setFontSize(11);
+            doc.setTextColor(0, 0, 0);
+            doc.text(`Élève : ${elevePrenom} ${eleveNom}`, 20, 35);
+            doc.text(`Groupe : ${eleveGroupe}`, 20, 42);
+            doc.text(`Date : ${date}`, 20, 49);
+            doc.setFontSize(14);
+            doc.text(`Score Final : ${score} / 20`, 20, 60);
+            doc.text(`Mention : ${mentionSansEmoji}`, 20, 68);
+            const tableColumns = ["N°", "Mode de jeu", "Résultat", "Points"];
+            const tableRows = evalDetails.map(d => [
+                `Question ${d.question}`,
+                d.mode,
+                d.succes ? 'RÉUSSIE' : 'ÉCHEC',
+                `${d.points} / ${d.max}`
+            ]);
+            doc.autoTable({
+                startY: 80,
+                head: [tableColumns],
+                body: tableRows,
+                headStyles: { fillColor: [52, 152, 219], textColor: [255, 255, 255], fontStyle: 'bold' },
+                didParseCell: function(data) {
+                    if (data.column.index === 2 && data.cell.section === 'body') {
+                        if (data.cell.raw === 'RÉUSSIE') data.cell.styles.textColor = [39, 174, 96];
+                        else if (data.cell.raw === 'ÉCHEC') data.cell.styles.textColor = [231, 76, 60];
+                    }
+                }
+            });
+            doc.save(`Evaluation_Heures_${eleveNom}_${elevePrenom}.pdf`);
+        }
+
+        function afficherResultatFinal() {
+            isEvaluationMode = false;
+            ui.container.style.display = 'none';
+            ui.menu.style.display = 'none';
+            let mention = evalScore >= 18 ? "🏆 Excellent !" : (evalScore >= 14 ? "🥈 Très bien !" : (evalScore >= 10 ? "🥉 Pas mal." : "📚 À réviser."));
+            const resultHTML = `
+                <div id="final-result-screen" style="text-align: center; background: white; padding: 40px; border-radius: 20px; box-shadow: 0 10px 25px rgba(0,0,0,0.1); margin: 50px auto; max-width: 800px; width: 90%;">
+                    <h1 style="color: #2c3e50; margin-bottom: 10px;">Évaluation Terminée</h1>
+                    <p style="font-size: 1.2rem; color: #7f8c8d;">Élève : <strong>${elevePrenom} ${eleveNom}</strong> (${eleveGroupe})</p>
+                    <hr style="border: 0; height: 1px; background: #eee; margin: 20px 0;">
+                    <div style="font-size: 3rem; font-weight: 800; color: #2ecc71; margin: 20px 0;">${evalScore} / 20</div>
+                    <p style="font-size: 1.5rem; font-weight: bold; color: #34495e; margin-bottom: 20px;">${mention}</p>
+                    <h3 style="color: #2c3e50; text-align: left; margin-top: 30px;">Détails des épreuves :</h3>
+                    <table class="result-table">
+                        <thead><tr><th>Question</th><th>Mode</th><th>Résultat</th><th>Points</th></tr></thead>
+                        <tbody>
+                            ${evalDetails.map(d => `
+                                <tr><td>${d.question}</td><td>${d.mode}</td><td style="color:${d.succes ? '#27ae60' : '#e74c3c'}; font-weight: bold;">${d.succes ? 'RÉUSSIE' : 'ÉCHEC'}</td><td>${d.points} / ${d.max}</td></tr>
+                            `).join('')}
+                        </tbody>
+                    </table>
+                    <div style="display: flex; gap: 15px; justify-content: center; margin-top: 30px;">
+                        <button onclick="genererPDF(${evalScore}, '${mention.replace(/'/g, "\\'")}')" style="background: #3498db; color: white; padding: 15px 25px; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 1rem; flex: 1;">📥 TÉLÉCHARGER LE PDF</button>
+                        <button onclick="location.reload()" style="background: #333; color: white; padding: 15px 25px; border: none; border-radius: 12px; cursor: pointer; font-weight: bold; font-size: 1rem; flex: 1;">↩ RETOUR AU MENU</button>
+                    </div>
+                </div>
+            `;
+            document.body.innerHTML = resultHTML;
+            document.body.style.justifyContent = "flex-start";
+        }
+
+        function showMenu() { clearInterval(timerInterval); isEvaluationMode = false; ui.menu.style.display = 'block'; ui.container.style.display = 'none'; }
+        function timeToMin(str) { const parts = str.split(':'); if(parts.length < 2) return 0; return parseInt(parts[0]) * 60 + parseInt(parts[1]); }
+        function minToTime(total) { total = (total + 1440) % 1440; const h = Math.floor(total / 60); const m = total % 60; return `${h.toString().padStart(2, '0')}:${m.toString().padStart(2, '0')}`; }
+
+        function genererNouvelleHeure() {
+            ui.fanH.style.display = "none"; ui.fanM.style.display = "none";
+            document.querySelectorAll('.fantome').forEach(f => f.style.display = "none");
+            ui.commentaire.className = ""; ui.btnVerifier.disabled = false;
+            if(!isEvaluationMode) ui.btnSuivant.style.display = "block";
+            else ui.btnSuivant.style.display = "none";
+            
+            niveauIndice = 0; ui.btnIndice.textContent = "INDICE (0/2)";
+            userH = 0; userM = 0;
+
+            if (currentGameMode === 'voyageurExpert') {
+                const types = ['fin', 'duree', 'debut'];
+                voyageurTargetType = types[Math.floor(Math.random() * 3)];
+                vStartMin = Math.floor(Math.random() * 1440);
+                vDurationMin = Math.floor(Math.random() * (24 * 60 - 1)) + 15;
+                vEndMin = (vStartMin + vDurationMin) % 1440;
+                userMomentDebut = ''; userMomentFin = '';
+                document.querySelectorAll('.btn-moment').forEach(btn => { btn.classList.remove('active'); btn.disabled = false; });
+                
+                if (voyageurTargetType === 'fin') {
+                    setMoment('debut', vStartMin < 720 ? 'AM' : 'PM');
+                    document.getElementById('btn-debut-am').disabled = true; document.getElementById('btn-debut-pm').disabled = true;
+                    ui.commentaire.textContent = "Place l'heure d'ARRIVÉE (+ AM/PM)";
+                    updateAiguilles(Math.floor(vStartMin/60), vStartMin%60, 'debut');
+                    updateAiguilles(0, 0, 'fin'); 
+                } else if (voyageurTargetType === 'duree') {
+                    setMoment('debut', vStartMin < 720 ? 'AM' : 'PM'); setMoment('fin', vEndMin < 720 ? 'AM' : 'PM');
+                    document.querySelectorAll('.btn-moment').forEach(btn => btn.disabled = true);
+                    ui.veDuree.value = ""; ui.veDuree.focus();
+                    ui.commentaire.textContent = "Calcule la DURÉE";
+                    updateAiguilles(Math.floor(vStartMin/60), vStartMin%60, 'debut');
+                    updateAiguilles(Math.floor(vEndMin/60), vEndMin%60, 'fin');
+                } else {
+                    setMoment('fin', vEndMin < 720 ? 'AM' : 'PM');
+                    document.getElementById('btn-fin-am').disabled = true; document.getElementById('btn-fin-pm').disabled = true;
+                    ui.commentaire.textContent = "Place l'heure de DÉPART (+ AM/PM)";
+                    updateAiguilles(0, 0, 'debut');
+                    updateAiguilles(Math.floor(vEndMin/60), vEndMin%60, 'fin');
+                }
+                ui.veDuree.value = (voyageurTargetType === 'duree') ? "" : minToTime(vDurationMin);
+                ui.veDuree.disabled = (voyageurTargetType !== 'duree');
+                return;
+            }
+
+            if (currentGameMode === 'voyageur') {
+                const types = ['fin', 'duree', 'debut'];
+                voyageurTargetType = types[Math.floor(Math.random() * 3)];
+                let start = Math.floor(Math.random() * 1440);
+                let duration = Math.floor(Math.random() * 300) + 15;
+                let end = (start + duration) % 1440;
+                ui.vDebut.value = minToTime(start); ui.vDuree.value = minToTime(duration); ui.vFin.value = minToTime(end);
+                ui.vDebut.disabled = ui.vDuree.disabled = ui.vFin.disabled = false;
+                if (voyageurTargetType === 'fin') { voySolution = ui.vFin.value; ui.vFin.value = ""; ui.vFin.focus(); ui.vDebut.disabled = ui.vDuree.disabled = true; ui.commentaire.textContent = "Calcule la FIN"; }
+                else if (voyageurTargetType === 'duree') { voySolution = ui.vDuree.value; ui.vDuree.value = ""; ui.vDuree.focus(); ui.vDebut.disabled = ui.vFin.disabled = true; ui.commentaire.textContent = "Calcule la DURÉE"; }
+                else { voySolution = ui.vDebut.value; ui.vDebut.value = ""; ui.vDebut.focus(); ui.vDuree.disabled = ui.vFin.disabled = true; ui.commentaire.textContent = "Calcule le DÉBUT"; }
+                return;
+            }
+
+            heureCible = Math.floor(Math.random() * 24);
+            minuteCible = Math.floor(Math.random() * 60);
+            if (currentGameMode === 'atelier') {
+                updateAiguilles(0, 0);
+                ui.cible.textContent = `${heureCible.toString().padStart(2, '0')}:${minuteCible.toString().padStart(2, '0')}`;
+                ui.commentaire.textContent = "Place les aiguilles !";
+            } else {
+                updateAiguilles(heureCible, minuteCible);
+                ui.moment.textContent = heureCible < 12 ? "MATIN (AM)" : "APRÈS-MIDI (PM)";
+                ui.moment.style.backgroundColor = heureCible < 12 ? "#fff9c4" : "#e8eaf6";
+                ui.moment.style.borderColor = heureCible < 12 ? "#fbc02d" : "#3f51b5";
+                ui.commentaire.textContent = (currentGameMode === 'chrono') ? "Vite ! 10s !" : "Quelle heure est-il ?";
+            }
+            essaisRestants = 3; ui.input.value = ''; ui.input.disabled = false;
+            ui.essais.textContent = (currentGameMode === 'classic') ? `Essais : ${essaisRestants}/3` : "";
+            if (currentGameMode !== 'atelier' && currentGameMode !== 'voyageur' && currentGameMode !== 'voyageurExpert') ui.input.focus();
+            if (currentGameMode === 'chrono') startChrono();
+        }
+
+        function startChrono() {
+            clearInterval(timerInterval); tempsRestant = 10; ui.timerBar.style.width = "100%";
+            timerInterval = setInterval(() => {
+                tempsRestant -= 0.1; ui.timerBar.style.width = (tempsRestant * 10) + "%";
+                if (tempsRestant <= 0) {
+                    clearInterval(timerInterval);
+                    echec(`TEMPS ÉCOULÉ ! C'était ${heureCible.toString().padStart(2, '0')}:${minuteCible.toString().padStart(2, '0')}`);
+                }
+            }, 100);
+        }
+
+        function verifierHeure() {
+            if (ui.btnVerifier.disabled) return;
+            clearInterval(timerInterval);
+            let isCorrect = false;
+            let pointsEtape = isEvaluationMode ? evalSequence[evalStep][1] : 0;
+            let correctionMsg = "";
+
+            if (currentGameMode === 'voyageurExpert') {
+                const userTotalMin = (userH * 60) + userM;
+                let momentCorrect = false;
+                if (voyageurTargetType === 'fin') { 
+                    isCorrect = (userTotalMin === (vEndMin % 720)); 
+                    momentCorrect = (userMomentFin === (vEndMin < 720 ? 'AM' : 'PM'));
+                    correctionMsg = `Solution : ${minToTime(vEndMin)} (${vEndMin < 720 ? 'AM' : 'PM'})`;
+                }
+                else if (voyageurTargetType === 'debut') { 
+                    isCorrect = (userTotalMin === (vStartMin % 720)); 
+                    momentCorrect = (userMomentDebut === (vStartMin < 720 ? 'AM' : 'PM'));
+                    correctionMsg = `Solution : ${minToTime(vStartMin)} (${vStartMin < 720 ? 'AM' : 'PM'})`;
+                }
+                else if (voyageurTargetType === 'duree') { 
+                    isCorrect = (timeToMin(ui.veDuree.value) === vDurationMin); 
+                    momentCorrect = true; 
+                    correctionMsg = `Solution : ${minToTime(vDurationMin)}`;
+                }
+                isCorrect = isCorrect && momentCorrect;
+            } else if (currentGameMode === 'voyageur') {
+                const tDeb = timeToMin(ui.vDebut.value); const tDur = timeToMin(ui.vDuree.value); const tFin = timeToMin(ui.vFin.value);
+                if (voyageurTargetType === 'fin') isCorrect = ( (tDeb + tDur) % 1440 === tFin );
+                if (voyageurTargetType === 'duree') isCorrect = ( (tFin - tDeb + 1440) % 1440 === tDur );
+                if (voyageurTargetType === 'debut') isCorrect = ( (tFin - tDur + 1440) % 1440 === tDeb );
+                correctionMsg = `Solution : ${voyageurTargetType === 'fin' ? minToTime((tDeb+tDur)%1440) : (voyageurTargetType === 'duree' ? minToTime((tFin-tDeb+1440)%1440) : minToTime((tFin-tDur+1440)%1440))}`;
+            } else {
+                const correctStr = `${heureCible.toString().padStart(2, '0')}:${minuteCible.toString().padStart(2, '0')}`;
+                if (currentGameMode === 'atelier') isCorrect = (userH === (heureCible % 12)) && (userM === minuteCible);
+                else isCorrect = (ui.input.value === correctStr);
+                correctionMsg = `Solution : ${correctStr}`;
+            }
+
+            if (isEvaluationMode || currentGameMode === 'voyageurExpert') {
+                if (isEvaluationMode) evalDetails.push({ question: evalStep+1, mode: currentGameMode, points: isCorrect ? pointsEtape : 0, max: pointsEtape, succes: isCorrect });
+                if (isCorrect) { 
+                    if(isEvaluationMode) evalScore += pointsEtape; 
+                    ui.commentaire.innerHTML = isEvaluationMode ? `<span class="success">CORRECT ! (+${pointsEtape} pts)</span>` : `<span class="success">BRAVO !</span>`;
+                    if(!isEvaluationMode) { serieVictoires++; updateRecord(); }
+                } else {
+                    ui.commentaire.innerHTML = `<span class="error">${isEvaluationMode ? 'ERREUR (0 pt)' : 'DOMMAGE !'}<br><small>${correctionMsg}</small></span>`;
+                    if (currentGameMode === 'voyageurExpert') {
+                        let prefix = (voyageurTargetType === 'fin' ? 'fin' : 'debut');
+                        if (voyageurTargetType !== 'duree') {
+                            const fH = document.getElementById(`fantome-h-${prefix}`); const fM = document.getElementById(`fantome-m-${prefix}`);
+                            let targetVal = (voyageurTargetType === 'fin' ? vEndMin : vStartMin);
+                            fH.style.transform = `rotate(${(Math.floor(targetVal/60)%12*30)+(targetVal%60*0.5)}deg)`;
+                            fM.style.transform = `rotate(${(targetVal%60)*6}deg)`;
+                            fH.style.display = "block"; fM.style.display = "block";
+                        }
+                    } else {
+                        ui.fanM.style.transform = `rotate(${minuteCible * 6}deg)`; ui.fanH.style.transform = `rotate(${(heureCible%12*30)+(minuteCible*0.5)}deg)`;
+                        ui.fanH.style.display = "block"; ui.fanM.style.display = "block";
+                    }
+                    if(!isEvaluationMode) { if (serieVictoires > 0) document.getElementById('last-count').textContent = serieVictoires; serieVictoires = 0; }
+                }
+                document.getElementById('streak-count').textContent = serieVictoires;
+                ui.btnVerifier.disabled = true; ui.btnSuivant.style.display = "block";
+                finDeTour(); return;
+            }
+
+            if (isCorrect) {
+                ui.commentaire.innerHTML = "🌟 BRAVO !"; ui.commentaire.className = "success";
+                serieVictoires++; animerScore(); updateRecord(); finDeTour();
+            } else {
+                if (currentGameMode === 'classic' && essaisRestants > 1) {
+                    essaisRestants--; ui.commentaire.textContent = "❌ Réessaie !"; ui.essais.textContent = `Essais : ${essaisRestants}/3`;
+                } else {
+                    echec(`DOMMAGE !<br><small>${correctionMsg}</small>`);
+                    ui.fanM.style.transform = `rotate(${minuteCible * 6}deg)`; ui.fanH.style.transform = `rotate(${(heureCible%12*30)+(minuteCible*0.5)}deg)`;
+                    ui.fanH.style.display = "block"; ui.fanM.style.display = "block";
+                }
+            }
+            document.getElementById('streak-count').textContent = serieVictoires;
+        }
+
+        function animerScore() { ui.streakBadge.classList.add('score-up'); setTimeout(() => ui.streakBadge.classList.remove('score-up'), 300); }
+        function echec(msg) { if (serieVictoires > 0) document.getElementById('last-count').textContent = serieVictoires; serieVictoires = 0; document.getElementById('streak-count').textContent = "0"; ui.commentaire.innerHTML = `<span class="error">${msg}</span>`; finDeTour(); }
+        function finDeTour() { ui.btnVerifier.disabled = true; ui.input.disabled = true; ui.veDuree.disabled = true; document.querySelectorAll('.btn-moment').forEach(btn => btn.disabled = true); }
+
+        function handleMove(e) {
+            if (ui.btnVerifier.disabled) return;
+            let targetPendule = (currentGameMode === 'atelier' ? ui.pendule : (voyageurTargetType === 'fin' ? ui.pFin : ui.pDeb));
+            const rect = targetPendule.getBoundingClientRect(); const x = (e.touches ? e.touches[0].clientX : e.clientX) - (rect.left + rect.width / 2);
+            const y = (e.touches ? e.touches[0].clientY : e.clientY) - (rect.top + rect.height / 2);
+            const rotate = (Math.atan2(y, x) * 180 / Math.PI + 450) % 360;
+            if (activeHand === null) activeHand = (Math.hypot(x, y) < 85) ? 'H' : 'M';
+            if (activeHand === 'H') userH = Math.floor(rotate / 30); else userM = Math.round(rotate / 6) % 60;
+            updateAiguilles(userH, userM, (currentGameMode === 'voyageurExpert' ? (voyageurTargetType === 'fin' ? 'fin' : 'debut') : ''), true);
+        }
+
+        function donnerIndice() {
+            niveauIndice++;
+            const mm = (currentGameMode === 'voyageur' ? voySolution.split(':')[1] : minuteCible.toString().padStart(2, '0'));
+            const hh = (currentGameMode === 'voyageur' ? voySolution.split(':')[0] : heureCible.toString().padStart(2, '0'));
+            if (niveauIndice === 1) { ui.commentaire.textContent = `💡 Minutes : ${mm}`; ui.btnIndice.textContent = "INDICE (1/2)"; }
+            else { ui.commentaire.textContent = `💡 Solution : ${hh}:${mm}`; ui.btnIndice.textContent = "INDICE (2/2)"; finDeTour(); }
+        }
+
+        function updateRecord() { if (serieVictoires > recordVictoires) { recordVictoires = serieVictoires; localStorage.setItem('record_'+currentGameMode, recordVictoires); document.getElementById('best-count').textContent = recordVictoires; } }
+        function setupAutoFormat(el) { el.addEventListener('input', (e) => { let val = e.target.value.replace(/\D/g, ''); if (val.length >= 2) e.target.value = val.slice(0, 2) + ':' + val.slice(2, 4); else e.target.value = val; }); }
+
+        window.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter') {
+                if (document.getElementById('custom-modal').style.display === 'flex') return;
+                if (!ui.btnVerifier.disabled && ui.container.style.display === 'flex') verifierHeure();
+                else if (ui.btnSuivant.style.display === 'block') { if (isEvaluationMode) prochainEtapeEval(); else genererNouvelleHeure(); }
+            }
+        });
+
+        [ui.input, ui.vDebut, ui.vDuree, ui.vFin, ui.veDuree].forEach(setupAutoFormat);
+        ui.btnVerifier.onclick = verifierHeure; ui.btnSuivant.onclick = genererNouvelleHeure; ui.btnIndice.onclick = donnerIndice;
+        const attachDrag = (el) => { el.addEventListener('mousedown', (e) => { isDragging = true; activeHand = null; handleMove(e); }); el.addEventListener('touchstart', (e) => { isDragging = true; activeHand = null; handleMove(e); }); };
+        [ui.pendule, ui.pDeb, ui.pFin].forEach(attachDrag);
+        window.addEventListener('mousemove', (e) => { if(isDragging) handleMove(e); }); window.addEventListener('mouseup', () => { isDragging = false; activeHand = null; });
+        window.addEventListener('touchmove', (e) => { if(isDragging) handleMove(e); }); window.addEventListener('touchend', () => { isDragging = false; activeHand = null; });
+        initPendule(ui.pendule); initPendule(ui.pDeb); initPendule(ui.pFin);
+    </script>
+</body>
+</html>
